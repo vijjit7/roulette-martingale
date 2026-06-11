@@ -8,6 +8,8 @@ import pytesseract
 import re
 from PIL import Image
 import numpy as np
+import base64
+import io
 
 def extract_numbers_from_image(image_path):
     """
@@ -31,40 +33,30 @@ def extract_numbers_from_image(image_path):
         # Convert to grayscale
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
-        numbers = []
-        
-        # Strategy 1: Standard preprocessing with Tesseract config
-        text1 = extract_with_preprocessing_v1(gray)
-        numbers1 = parse_numbers_from_text(text1)
-        if numbers1:
-            return numbers1
-        
-        # Strategy 2: Upscale image for better OCR
-        text2 = extract_with_upscaling(gray)
-        numbers2 = parse_numbers_from_text(text2)
-        if numbers2:
-            return numbers2
-        
-        # Strategy 3: Adaptive thresholding
-        text3 = extract_with_adaptive_threshold(gray)
-        numbers3 = parse_numbers_from_text(text3)
-        if numbers3:
-            return numbers3
-        
-        # Strategy 4: Simple binary threshold with different configs
-        text4 = extract_with_binary_threshold(gray)
-        numbers4 = parse_numbers_from_text(text4)
-        if numbers4:
-            return numbers4
-        
-        # Strategy 5: Direct OCR on grayscale with tesseract config
-        config = '--psm 6 -c tessedit_char_whitelist=0123456789'
-        text5 = pytesseract.image_to_string(gray, config=config)
-        numbers5 = parse_numbers_from_text(text5)
-        if numbers5:
-            return numbers5
-        
-        # If all strategies fail, return empty
+        # Run multiple strategies and return first non-empty result
+        strategies = {
+            'preprocessing_clahe': extract_with_preprocessing_v1(gray),
+            'upscaling': extract_with_upscaling(gray),
+            'adaptive_threshold': extract_with_adaptive_threshold(gray),
+            'binary_threshold': extract_with_binary_threshold(gray),
+            'grayscale_direct': pytesseract.image_to_string(gray, config='--psm 6 -c tessedit_char_whitelist=0123456789')
+        }
+
+        # Parse numbers for each strategy and collect debug info
+        candidates = {}
+        for name, txt in strategies.items():
+            nums = parse_numbers_from_text(txt)
+            candidates[name] = {
+                'text': txt if txt is not None else '',
+                'numbers': nums
+            }
+
+        # Return the first non-empty candidate numbers list
+        for name, info in candidates.items():
+            if info['numbers']:
+                return info['numbers']
+
+        # If none produced results, return empty list
         return []
     
     except Exception as e:
@@ -198,3 +190,145 @@ def parse_numbers_from_text(text):
             continue
     
     return valid_numbers
+
+
+def extract_numbers_with_debug(image_path):
+    """Run all strategies and return detailed debug outputs.
+
+    Returns dict: { 'numbers': [...], 'strategies': {name: {'text':..., 'numbers':[...]}} }
+    """
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            raise ValueError("Could not read image file")
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        strategies = {
+            'preprocessing_clahe': extract_with_preprocessing_v1(gray),
+            'upscaling': extract_with_upscaling(gray),
+            'adaptive_threshold': extract_with_adaptive_threshold(gray),
+            'binary_threshold': extract_with_binary_threshold(gray),
+            'spatial': None,
+            'grayscale_direct': pytesseract.image_to_string(gray, config='--psm 6 -c tessedit_char_whitelist=0123456789')
+        }
+
+        candidates = {}
+        for name, txt in strategies.items():
+            if name == 'spatial':
+                # spatial will return a dict with numbers, text and cells
+                spatial_info = spatial_extract_numbers(image_path)
+                candidates[name] = spatial_info
+            else:
+                nums = parse_numbers_from_text(txt)
+                candidates[name] = {'text': txt if txt is not None else '', 'numbers': nums}
+
+        # Pick first non-empty
+        selected = []
+        for info in candidates.values():
+            if info['numbers']:
+                selected = info['numbers']
+                break
+
+        return {'numbers': selected, 'strategies': candidates}
+    except Exception as e:
+        print(f"Debug extraction error: {e}")
+        return {'numbers': [], 'strategies': {}}
+
+
+def spatial_extract_numbers(image_path):
+    """Detect individual number ROIs and OCR each cell.
+
+    Returns a dict: {'text': concatenated_text, 'numbers': [...], 'cells': [data_url,...]}
+    """
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            return {'text': '', 'numbers': [], 'cells': []}
+
+        orig = img.copy()
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # Preprocess to find contours of digits/cells
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                       cv2.THRESH_BINARY_INV, 11, 2)
+
+        # Morph to merge digit strokes
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        morphed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        contours, _ = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        rois = []
+        for c in contours:
+            x, y, w, h = cv2.boundingRect(c)
+            area = w * h
+            # Filter by reasonable digit/cell size
+            if area < 200 or w < 8 or h < 8:
+                continue
+            if w > img.shape[1] * 0.9 or h > img.shape[0] * 0.9:
+                continue
+            rois.append((x, y, w, h))
+
+        if not rois:
+            return {'text': '', 'numbers': [], 'cells': []}
+
+        # Sort ROIs by y then x (top-to-bottom, left-to-right)
+        rois_sorted = sorted(rois, key=lambda r: (r[1], r[0]))
+
+        numbers = []
+        texts = []
+        cells_data = []
+        cell_numbers = []
+
+        for (x, y, w, h) in rois_sorted:
+            pad = 6
+            x1 = max(0, x - pad)
+            y1 = max(0, y - pad)
+            x2 = min(orig.shape[1], x + w + pad)
+            y2 = min(orig.shape[0], y + h + pad)
+            roi_color = orig[y1:y2, x1:x2]
+
+            # Preprocess per-ROI
+            roi_gray = cv2.cvtColor(roi_color, cv2.COLOR_BGR2GRAY)
+            roi_up = cv2.resize(roi_gray, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+            roi_blur = cv2.medianBlur(roi_up, 3)
+            _, roi_thresh = cv2.threshold(roi_blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+            cfg = '--psm 7 -c tessedit_char_whitelist=0123456789'
+            txt = pytesseract.image_to_string(roi_thresh, config=cfg)
+            txt_clean = txt.strip()
+            texts.append(txt_clean)
+
+            # convert roi_color to PNG data url
+            _, buffer = cv2.imencode('.png', roi_color)
+            b64 = base64.b64encode(buffer).decode('utf-8')
+            data_url = f'data:image/png;base64,{b64}'
+            cells_data.append(data_url)
+
+            # parse number from this ROI text
+            parsed = parse_numbers_from_text(txt_clean)
+            if parsed:
+                cell_numbers.append(parsed[0])
+            else:
+                cell_numbers.append(None)
+
+        concatenated = ' '.join([t for t in texts if t])
+
+        # Build cleaned numbers list (remove None)
+        cleaned = [n for n in cell_numbers if n is not None]
+
+        # The spatial detection sometimes yields reverse (LIFO) ordering depending on scan direction.
+        # Return FIFO order by reversing lists if needed — here we return FIFO (oldest first).
+        # Reverse arrays so cell 0 corresponds to the first (oldest) number.
+        cells_data = cells_data[::-1]
+        texts = texts[::-1]
+        cell_numbers = cell_numbers[::-1]
+        cleaned = cleaned[::-1]
+
+        return {'text': concatenated, 'numbers': cleaned, 'cells': cells_data, 'cell_numbers': cell_numbers}
+
+    except Exception as e:
+        print(f"spatial_extract_numbers error: {e}")
+        return {'text': '', 'numbers': [], 'cells': []}

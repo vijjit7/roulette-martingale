@@ -17,6 +17,9 @@ const confirmBtn = document.getElementById('confirmBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const editableNumbers = document.getElementById('editableNumbers');
 const extractedNumbersList = document.getElementById('extractedNumbersList');
+const strategyOptions = document.getElementById('strategyOptions');
+const strategyRawText = document.getElementById('strategyRawText');
+const perCellContainer = document.getElementById('perCellContainer');
 
 // Store current form state for later use
 let currentFormState = null;
@@ -137,14 +140,15 @@ form.addEventListener('submit', async (e) => {
                 return;
             }
             
-            // Store form state and show confirmation modal
+            // Store form state and show confirmation modal with strategy candidates
             currentFormState = {
                 balance,
                 strategy,
-                numbers: data.numbers
+                numbers: data.numbers,
+                strategies: data.strategies || {}
             };
-            
-            showConfirmationModal(data.numbers);
+
+            showConfirmationModal(data.numbers, data.strategies || {});
         }
     } catch (error) {
         hideLoading();
@@ -412,19 +416,172 @@ exportBtn.addEventListener('click', () => {
 });
 
 // Modal helper functions
-function showConfirmationModal(numbers) {
-    // Display extracted numbers as badges
+function showConfirmationModal(numbers, strategies = {}) {
+    // Prepare strategy options
+    strategyOptions.innerHTML = '';
+    const keys = Object.keys(strategies);
+    if (keys.length === 0) {
+        // Fallback single option
+        const opt = document.createElement('option');
+        opt.value = 'extracted';
+        opt.textContent = 'Extracted (default)';
+        strategyOptions.appendChild(opt);
+        strategyRawText.textContent = '';
+        strategyOptions.style.display = 'none';
+    } else {
+        strategyOptions.style.display = '';
+        keys.forEach((k, idx) => {
+            const opt = document.createElement('option');
+            opt.value = k;
+            opt.textContent = `${k} (${strategies[k].numbers.length} numbers)`;
+            strategyOptions.appendChild(opt);
+        });
+        // Show raw text for first strategy
+        const first = keys[0];
+        strategyRawText.textContent = strategies[first].text || '';
+        // Show per-cell thumbnails if available
+        if (strategies[first] && strategies[first].cells && strategies[first].cells.length) {
+            perCellContainer.innerHTML = '';
+            strategies[first].cells.forEach((dataUrl, idx) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'cell-wrap';
+                wrap.style.cursor = 'pointer';
+                const img = document.createElement('img');
+                img.src = dataUrl;
+                img.className = 'cell-thumb';
+                img.style.width = '48px';
+                img.style.height = '48px';
+                img.style.objectFit = 'contain';
+                const caption = document.createElement('div');
+                caption.className = 'cell-caption';
+                const val = (strategies[first].cell_numbers && strategies[first].cell_numbers[idx] !== undefined) ? strategies[first].cell_numbers[idx] : (strategies[first].numbers && strategies[first].numbers[idx] !== undefined ? strategies[first].numbers[idx] : '');
+                caption.textContent = val;
+                wrap.appendChild(img);
+                wrap.appendChild(caption);
+                perCellContainer.appendChild(wrap);
+
+                wrap.addEventListener('click', () => {
+                    const current = (strategies[first].cell_numbers && strategies[first].cell_numbers[idx] !== undefined) ? String(strategies[first].cell_numbers[idx]) : ((strategies[first].numbers && strategies[first].numbers[idx] !== undefined) ? String(strategies[first].numbers[idx]) : '');
+                    const edited = prompt('Edit number for this cell (0-36). Leave blank to clear.', current);
+                    if (edited === null) return;
+                    const parsed = parseInt(edited);
+                    if (edited.trim() === '') {
+                        if (strategies[first].cell_numbers) strategies[first].cell_numbers[idx] = null;
+                        else strategies[first].numbers[idx] = null;
+                        caption.textContent = '';
+                    } else if (!isNaN(parsed) && parsed >= 0 && parsed <= 36) {
+                        if (strategies[first].cell_numbers) strategies[first].cell_numbers[idx] = parsed;
+                        else strategies[first].numbers[idx] = parsed;
+                        caption.textContent = parsed;
+                    } else {
+                        alert('Invalid number. Must be 0-36.');
+                        return;
+                    }
+
+                    // Update badges and textarea
+                    extractedNumbersList.innerHTML = '';
+                    const sourceArr = strategies[first].cell_numbers ? strategies[first].cell_numbers : strategies[first].numbers;
+                    const cleaned = sourceArr.filter(n => n !== null && n !== undefined);
+                    cleaned.forEach(n => {
+                        const badge = document.createElement('div');
+                        badge.className = 'number-badge';
+                        badge.textContent = n;
+                        extractedNumbersList.appendChild(badge);
+                    });
+                    editableNumbers.value = cleaned.join(' ');
+                });
+            });
+        } else {
+            perCellContainer.innerHTML = '';
+        }
+    }
+
+    // Display initial extracted numbers as badges
     extractedNumbersList.innerHTML = '';
-    numbers.forEach(num => {
+    const initial = numbers || [];
+    initial.forEach(num => {
         const badge = document.createElement('div');
         badge.className = 'number-badge';
         badge.textContent = num;
         extractedNumbersList.appendChild(badge);
     });
-    
+
     // Pre-fill the textarea with the extracted numbers
-    editableNumbers.value = numbers.join(' ');
-    
+    editableNumbers.value = initial.join(' ');
+
+    // Attach change handler to strategyOptions
+    strategyOptions.onchange = () => {
+        const sel = strategyOptions.value;
+        const info = (strategies && strategies[sel]) || null;
+        if (info) {
+            // Update badges and textarea
+            extractedNumbersList.innerHTML = '';
+            info.numbers.forEach(n => {
+                const badge = document.createElement('div');
+                badge.className = 'number-badge';
+                badge.textContent = n;
+                extractedNumbersList.appendChild(badge);
+            });
+            editableNumbers.value = info.numbers.join(' ');
+            strategyRawText.textContent = info.text || '';
+            // Show per-cell thumbnails if present
+            if (info.cells && info.cells.length) {
+                perCellContainer.innerHTML = '';
+                info.cells.forEach((dataUrl, idx) => {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'cell-wrap';
+                    wrap.style.cursor = 'pointer';
+                    const img = document.createElement('img');
+                    img.src = dataUrl;
+                    img.className = 'cell-thumb';
+                    img.style.width = '48px';
+                    img.style.height = '48px';
+                    img.style.objectFit = 'contain';
+                    const caption = document.createElement('div');
+                    caption.className = 'cell-caption';
+                    const val = (info.cell_numbers && info.cell_numbers[idx] !== undefined) ? info.cell_numbers[idx] : (info.numbers && info.numbers[idx] !== undefined ? info.numbers[idx] : '');
+                    caption.textContent = val;
+                    wrap.appendChild(img);
+                    wrap.appendChild(caption);
+                    perCellContainer.appendChild(wrap);
+
+                    wrap.addEventListener('click', () => {
+                        const current = (info.cell_numbers && info.cell_numbers[idx] !== undefined) ? String(info.cell_numbers[idx]) : ((info.numbers && info.numbers[idx] !== undefined) ? String(info.numbers[idx]) : '');
+                        const edited = prompt('Edit number for this cell (0-36). Leave blank to clear.', current);
+                        if (edited === null) return;
+                        const parsed = parseInt(edited);
+                        if (edited.trim() === '') {
+                            if (info.cell_numbers) info.cell_numbers[idx] = null;
+                            else info.numbers[idx] = null;
+                            caption.textContent = '';
+                        } else if (!isNaN(parsed) && parsed >= 0 && parsed <= 36) {
+                            if (info.cell_numbers) info.cell_numbers[idx] = parsed;
+                            else info.numbers[idx] = parsed;
+                            caption.textContent = parsed;
+                        } else {
+                            alert('Invalid number. Must be 0-36.');
+                            return;
+                        }
+
+                        // Update badges and textarea
+                        extractedNumbersList.innerHTML = '';
+                        const sourceArr = info.cell_numbers ? info.cell_numbers : info.numbers;
+                        const cleaned = sourceArr.filter(n => n !== null && n !== undefined);
+                        cleaned.forEach(n => {
+                            const badge = document.createElement('div');
+                            badge.className = 'number-badge';
+                            badge.textContent = n;
+                            extractedNumbersList.appendChild(badge);
+                        });
+                        editableNumbers.value = cleaned.join(' ');
+                    });
+                });
+            } else {
+                perCellContainer.innerHTML = '';
+            }
+        }
+    };
+
     // Show modal
     confirmationModal.classList.remove('hidden');
     confirmationModal.scrollIntoView({ behavior: 'smooth' });

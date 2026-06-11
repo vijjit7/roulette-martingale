@@ -134,6 +134,14 @@
                     <p>Please review the numbers extracted from your screenshot. You can edit them if needed.</p>
                     
                     <div class="extracted-numbers-display">
+                        <div class="modal-row">
+                            <label for="strategyOptions">OCR Candidate</label>
+                            <select id="strategyOptions"></select>
+                        </div>
+                        <div style="margin-top:10px;">
+                            <pre id="strategyRawText" style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;border:1px solid #eee;max-height:150px;overflow:auto"></pre>
+                        </div>
+                        <div id="perCellContainer" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;max-height:180px;overflow:auto"></div>
                         <div id="extractedNumbersList" class="numbers-list"></div>
                     </div>
 

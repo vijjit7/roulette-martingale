@@ -42,9 +42,17 @@ def extract_numbers():
         file.save(filepath)
         
         # Extract numbers from image
-        numbers = extract_numbers_from_image(filepath)
+        from image_processor import extract_numbers_with_debug
+        debug = extract_numbers_with_debug(filepath)
+        numbers = debug.get('numbers', [])
+        strategies = debug.get('strategies', {})
         
         if not numbers:
+            # Clean up uploaded file
+            try:
+                os.remove(filepath)
+            except:
+                pass
             return jsonify({'error': 'Could not extract numbers from screenshot. Please ensure the numbers are clearly visible. Try: 1) Better lighting, 2) Higher resolution, 3) Cropping just the numbers area'}), 400
         
         # Clean up uploaded file
@@ -56,7 +64,8 @@ def extract_numbers():
         return jsonify({
             'success': True,
             'numbers': numbers,
-            'count': len(numbers)
+            'count': len(numbers),
+            'strategies': strategies
         })
     
     except Exception as e:
