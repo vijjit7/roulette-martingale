@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roulette Martingale Strategy Tester</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎰 Roulette Martingale Strategy Tester</h1>
+            <p>Test the progressive betting strategy on historical roulette numbers</p>
+        </header>
+
+        <main>
+            <!-- Input Section -->
+            <section class="input-section">
+                <h2>Input Data</h2>
+                <form id="strategyForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="balance">Initial Balance ($)</label>
+                        <input 
+                            type="number" 
+                            id="balance" 
+                            name="balance" 
+                            placeholder="e.g., 1000" 
+                            required 
+                            min="1" 
+                            step="0.01"
+                            value="1000"
+                        >
+                        <small>Enter your starting balance</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="strategy">Strategy</label>
+                        <select id="strategy" name="strategy" required>
+                            <option value="red_black">Red/Black Martingale (Strategy-1)</option>
+                        </select>
+                        <small>Progressive doubling on red/black betting</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="screenshot">Screenshot of Past Numbers</label>
+                        <div class="file-input-wrapper">
+                            <input 
+                                type="file" 
+                                id="screenshot" 
+                                name="screenshot" 
+                                accept="image/*"
+                                required
+                            >
+                            <span class="file-input-label">Choose Image or Drag Here</span>
+                        </div>
+                        <small>Supported formats: PNG, JPG, JPEG, GIF, BMP (Max 16MB)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="demoNumbers">Or Test with Demo Numbers</label>
+                        <textarea 
+                            id="demoNumbers" 
+                            placeholder="e.g., 5 12 18 23 11 30 (space or comma separated)"
+                            rows="3"
+                        ></textarea>
+                        <small>Optional: Enter numbers directly to test without uploading an image</small>
+                    </div>
+
+                    <button type="submit" class="btn-submit">Test Strategy</button>
+                </form>
+            </section>
+
+            <!-- Loading Indicator -->
+            <div id="loadingIndicator" class="loading-indicator hidden">
+                <div class="spinner"></div>
+                <p>Processing strategy test...</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="errorMessage" class="error-message hidden"></div>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="results-section hidden">
+                <h2>Test Results</h2>
+
+                <!-- Summary Stats -->
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <h3>Final Balance</h3>
+                        <p class="stat-value" id="finalBalance">$0.00</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Profit/Loss</h3>
+                        <p class="stat-value" id="totalProfit">$0.00</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>ROI</h3>
+                        <p class="stat-value" id="roi">0%</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Win Rate</h3>
+                        <p class="stat-value" id="winRate">0%</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Rounds</h3>
+                        <p class="stat-value" id="totalRounds">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Game Status</h3>
+                        <p class="stat-value" id="gameStatus">-</p>
+                    </div>
+                </div>
+
+                <!-- Detailed Rounds -->
+                <div class="rounds-section">
+                    <h3>Detailed Round-by-Round Calculation</h3>
+                    <div class="controls">
+                        <input 
+                            type="text" 
+                            id="searchRound" 
+                            placeholder="Search round or number..."
+                            class="search-box"
+                        >
+                        <button id="exportBtn" class="btn-secondary">Export to CSV</button>
+                    </div>
+                    <div id="roundsTable" class="rounds-table"></div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>⚠️ <strong>Disclaimer:</strong> This is an educational tool for testing betting strategies. Gambling involves risk and can result in financial loss. Not for actual betting decisions.</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
