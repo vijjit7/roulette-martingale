@@ -11,6 +11,23 @@ const fileInputWrapper = document.querySelector('.file-input-wrapper');
 const searchRound = document.getElementById('searchRound');
 const exportBtn = document.getElementById('exportBtn');
 
+// Modal elements
+const confirmationModal = document.getElementById('confirmationModal');
+const confirmBtn = document.getElementById('confirmBtn');
+const cancelBtn = document.getElementById('cancelBtn');
+const editableNumbers = document.getElementById('editableNumbers');
+const extractedNumbersList = document.getElementById('extractedNumbersList');
+
+// Store current form state for later use
+let currentFormState = null;
+
+// File input click handler
+fileInputWrapper.addEventListener('click', (e) => {
+    if (e.target.tagName !== 'INPUT') {
+        screenshotInput.click();
+    }
+});
+
 // File input drag and drop
 fileInputWrapper.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -72,10 +89,8 @@ form.addEventListener('submit', async (e) => {
     showLoading();
     
     try {
-        let response;
-        
         if (demoNumbers) {
-            // Use demo numbers
+            // Use demo numbers directly
             const numbers = parseNumbers(demoNumbers);
             if (numbers.length === 0) {
                 showError('No valid numbers found. Use numbers 0-36 separated by space or comma.');
@@ -83,7 +98,7 @@ form.addEventListener('submit', async (e) => {
                 return;
             }
             
-            response = await fetch('/api/test-demo', {
+            const response = await fetch('/api/test-demo', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -94,21 +109,83 @@ form.addEventListener('submit', async (e) => {
                     numbers
                 })
             });
-        } else {
-            // Use screenshot
+
+            const data = await response.json();
+            hideLoading();
+            
+            if (!response.ok || data.error) {
+                showError(data.error || 'An error occurred');
+                return;
+            }
+            
+            displayResults(data);
+        } else if (hasScreenshot) {
+            // Extract numbers from screenshot first
             const formData = new FormData();
-            formData.append('balance', balance);
-            formData.append('strategy', strategy);
             formData.append('screenshot', screenshotInput.files[0]);
             
-            response = await fetch('/api/test-strategy', {
+            const response = await fetch('/api/extract-numbers', {
                 method: 'POST',
                 body: formData
             });
+            
+            const data = await response.json();
+            hideLoading();
+            
+            if (!response.ok || data.error) {
+                showError(data.error || 'An error occurred');
+                return;
+            }
+            
+            // Store form state and show confirmation modal
+            currentFormState = {
+                balance,
+                strategy,
+                numbers: data.numbers
+            };
+            
+            showConfirmationModal(data.numbers);
         }
+    } catch (error) {
+        hideLoading();
+        showError(`Network error: ${error.message}`);
+    }
+});
+
+// Modal handlers
+confirmBtn.addEventListener('click', async () => {
+    const editedText = editableNumbers.value.trim();
+    let finalNumbers;
+    
+    if (editedText) {
+        finalNumbers = parseNumbers(editedText);
+        if (finalNumbers.length === 0) {
+            alert('Please enter valid numbers (0-36) separated by space or comma');
+            return;
+        }
+    } else {
+        finalNumbers = currentFormState.numbers;
+    }
+    
+    hideConfirmationModal();
+    
+    // Now run the test with confirmed numbers
+    showLoading();
+    
+    try {
+        const response = await fetch('/api/test-demo', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                balance: currentFormState.balance,
+                strategy: currentFormState.strategy,
+                numbers: finalNumbers
+            })
+        });
         
         const data = await response.json();
-        
         hideLoading();
         
         if (!response.ok || data.error) {
@@ -120,6 +197,17 @@ form.addEventListener('submit', async (e) => {
     } catch (error) {
         hideLoading();
         showError(`Network error: ${error.message}`);
+    }
+});
+
+cancelBtn.addEventListener('click', () => {
+    hideConfirmationModal();
+});
+
+// Close modal when clicking outside
+confirmationModal.addEventListener('click', (e) => {
+    if (e.target === confirmationModal) {
+        hideConfirmationModal();
     }
 });
 
@@ -322,3 +410,29 @@ exportBtn.addEventListener('click', () => {
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
 });
+
+// Modal helper functions
+function showConfirmationModal(numbers) {
+    // Display extracted numbers as badges
+    extractedNumbersList.innerHTML = '';
+    numbers.forEach(num => {
+        const badge = document.createElement('div');
+        badge.className = 'number-badge';
+        badge.textContent = num;
+        extractedNumbersList.appendChild(badge);
+    });
+    
+    // Pre-fill the textarea with the extracted numbers
+    editableNumbers.value = numbers.join(' ');
+    
+    // Show modal
+    confirmationModal.classList.remove('hidden');
+    confirmationModal.scrollIntoView({ behavior: 'smooth' });
+    editableNumbers.focus();
+}
+
+function hideConfirmationModal() {
+    confirmationModal.classList.add('hidden');
+    editableNumbers.value = '';
+    extractedNumbersList.innerHTML = '';
+}

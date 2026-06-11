@@ -21,6 +21,47 @@ def allowed_file(filename):
 def index():
     return render_template('index.html')
 
+@app.route('/api/extract-numbers', methods=['POST'])
+def extract_numbers():
+    """Extract numbers from screenshot without testing strategy"""
+    try:
+        # Check if file is present
+        if 'screenshot' not in request.files:
+            return jsonify({'error': 'No screenshot uploaded'}), 400
+        
+        file = request.files['screenshot']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'Invalid file type. Allowed: PNG, JPG, JPEG, GIF, BMP'}), 400
+        
+        # Save file
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        
+        # Extract numbers from image
+        numbers = extract_numbers_from_image(filepath)
+        
+        if not numbers:
+            return jsonify({'error': 'Could not extract numbers from screenshot. Please ensure the numbers are clearly visible.'}), 400
+        
+        # Clean up uploaded file
+        try:
+            os.remove(filepath)
+        except:
+            pass
+        
+        return jsonify({
+            'success': True,
+            'numbers': numbers,
+            'count': len(numbers)
+        })
+    
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 @app.route('/api/test-strategy', methods=['POST'])
 def test_strategy():
     try:

@@ -126,6 +126,32 @@
                     <div id="roundsTable" class="rounds-table"></div>
                 </div>
             </section>
+
+            <!-- Confirmation Modal for Extracted Numbers -->
+            <div id="confirmationModal" class="modal hidden">
+                <div class="modal-content">
+                    <h2>Confirm Extracted Numbers</h2>
+                    <p>Please review the numbers extracted from your screenshot. You can edit them if needed.</p>
+                    
+                    <div class="extracted-numbers-display">
+                        <div id="extractedNumbersList" class="numbers-list"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editableNumbers">Edit Numbers (space or comma separated)</label>
+                        <textarea 
+                            id="editableNumbers" 
+                            placeholder="e.g., 5 12 18 23 11 30"
+                            rows="3"
+                        ></textarea>
+                    </div>
+
+                    <div class="modal-buttons">
+                        <button id="confirmBtn" class="btn-submit">Confirm & Run Test</button>
+                        <button id="cancelBtn" class="btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <footer>
