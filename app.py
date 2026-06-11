@@ -45,7 +45,7 @@ def extract_numbers():
         numbers = extract_numbers_from_image(filepath)
         
         if not numbers:
-            return jsonify({'error': 'Could not extract numbers from screenshot. Please ensure the numbers are clearly visible.'}), 400
+            return jsonify({'error': 'Could not extract numbers from screenshot. Please ensure the numbers are clearly visible. Try: 1) Better lighting, 2) Higher resolution, 3) Cropping just the numbers area'}), 400
         
         # Clean up uploaded file
         try:
